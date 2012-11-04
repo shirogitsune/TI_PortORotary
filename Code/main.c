@@ -63,128 +63,144 @@ int OFFHOOK;
  */
 void main(){
 
-	WDTCTL = WDTPW + WDTHOLD; //Shut off Watchdog Timer
-	DCOCTL = 0x00;  // Set DCOCLK to 1MHz
-	BCSCTL1 = CALBC1_1MHZ;
-	DCOCTL = CALDCO_1MHZ;
+		WDTCTL = WDTPW + WDTHOLD; //Shut off Watchdog Timer
+		DCOCTL = 0x00;  // Set DCOCLK to 1MHz
+		BCSCTL1 = CALBC1_1MHZ;
+		DCOCTL = CALDCO_1MHZ;
+		
+		P1OUT = 0x00; // Initialize GPIO
+		P1SEL = CELL_UART_TXD + CELL_UART_RXD;  // Timer function for TXD/RXD pins
 	
-	P1OUT = 0x00; // Initialize GPIO
-	P1SEL = CELL_UART_TXD + CELL_UART_RXD;  // Timer function for TXD/RXD pins
-
-	/* Setup Timer A: We'll use this for finding if we need to start dialing */
-	TACCR0 = 62500 - 1;  // a period of 62,500 cycles is 0 to 62,499.
-	TACCTL0 = CCIE;      // Enable interrupts for CCR0.
-	TACTL = TASSEL_2 + ID_3 + MC_0 + TACLR + TAIE;
+		/* Setup Timer A: We'll use this for finding if we need to start dialing */
+		TACCR0 = 62500 - 1;  // a period of 62,500 cycles is 0 to 62,499.
+		TACCTL0 = CCIE;      // Enable interrupts for CCR0.
+		TACTL = TASSEL_2 + ID_3 + MC_0 + TACLR + TAIE;
+		
+		/* Setup Timer B: We'll use this with the serial transmission */
+		TBCCR1 = 62500 - 1;  // a period of 62,500 cycles is 0 to 62,499.
+		TBCCTL1 = CCIE;      // Enable interrupts for CCR1.
+		TBCTL = TBSSEL_2 + ID_3 + MC_0 + TBCLR + TBIE;
+		
+		/* Set the following pins to input */
+		P1DIR ^= HOOK;
+		P1DIR ^= CELL_UART_RXD;
+		P1DIR ^= ROTARY;
+		P1DIR ^= ROTARY_END;
+		/* Set the following pins to output */
+		P1DIR |= CELL_UART_TXD;
 	
-	/* Setup Timer B: We'll use this with the serial transmission */
-	TBCCR1 = 62500 - 1;  // a period of 62,500 cycles is 0 to 62,499.
-	TBCCTL1 = CCIE;      // Enable interrupts for CCR1.
-	TBCTL = TBSSEL_2 + ID_3 + MC_0 + TBCLR + TBIE;
+		/* Set Interrupts for relevant ports  */
+		P1IE |= HOOK;
+		P1IE |= CELL_UART_RXD;
+		P1IE |= ROTARY;
+		P1IE |= ROTARY_END;
+		
+		/* Set Hi/Lo Direction */
+		P1IES ^= HOOK; 			// Lo -> Hi
+		P1IES ^= CELL_UART_RXD;		// Lo -> Hi
+		P1IES ^= ROTARY;		// Lo -> Hi
+		P1IES |= ROTARY_END;		// Hi -> Lo
+		
+		/* Kill Interrupts for relevant ports so they don't trigger right away */
+		P1IFG &= ~HOOK;
+		P1IFG &= ~CELL_UART_RXD;
+		P1IFG &= ~ROTARY;
+		P1IFG &= ~ROTARY_END;
 	
-	/* Set the following pins to input */
-	P1DIR ^= HOOK;
-	P1DIR ^= CELL_UART_RXD;
-	P1DIR ^= ROTARY;
-	P1DIR ^= ROTARY_END;
-	/* Set the following pins to output */
-	P1DIR |= CELL_UART_TXD;
-
-	/* Set Interrupts for relevant ports  */
-	P1IE |= HOOK;
-	P1IE |= CELL_UART_RXD;
-	P1IE |= ROTARY;
-	P1IE |= ROTARY_END;
-	
-	/* Set Hi/Lo Direction */
-	P1IES ^= HOOK; 			// Lo -> Hi
-	P1IES ^= CELL_UART_RXD;		// Lo -> Hi
-	P1IES ^= ROTARY;		// Lo -> Hi
-	P1IES |= ROTARY_END;		// Hi -> Lo
-	
-	/* Kill Interrupts for relevant ports so they don't trigger right away */
-	P1IFG &= ~HOOK;
-	P1IFG &= ~CELL_UART_RXD;
-	P1IFG &= ~ROTARY;
-	P1IFG &= ~ROTARY_END;
-
-	/* Drop into low power mode and listen for interrupts */
-	_BIS_SR(LPM4_bits + GIE);
-}
+		/* Drop into low power mode and listen for interrupts */
+		_BIS_SR(LPM4_bits + GIE);
+		
+} // End Main
 
 #pragma vector = PORT1_VECTOR
 __interrupt void Port_1(void){
   
-  switch(P1IFG){
-    case HOOK:
-      // Hook switch trigger
-      if((P1IES & HOOK) != 0){
-	//Off Hook
-	OFFHOOK = 1;
-	P1IES |= HOOK; // Hi->Lo
-	P1IFG &= ~HOOK;
-      }else{
-	//On Hook
-	char *cmd = "ATH;\r\0";
-	//Clear phone number
-	CURR_PHONE = '\0';
-	CURR_DIGIT = 0;
-	OFFHOOK = 0;
-	//Stop/Clear Timer
-	TACTL &= MC_0 + TACLR;
-	//Reset Pin/Interrupt
-	P1IES ^= HOOK; // Lo->Hi
-	P1IFG &= ~HOOK;
-      }
-    break;
-    case CELL_UART_RXD:
-      // Cell Serial Receive trigger
-    break;
-    case ROTARY:
-      // Rotary counter trigger
-      if(OFFHOOK == 1){
-	++CURR_DIGIT;
-	//Reset Interrupt
-	P1IFG &= ~ROTARY;
-      }
-    break;
-    case ROTARY_END:
-      // Rotary Dial End trigger
-     if(OFFHOOK==1){
-	if((P1IFG & ROTARY_END) != 0){
-	  //Start/Clear Timer
-	  TACTL &= MC_1 + TACLR;
-	  //Append digit to phone number
-	  CURR_PHONE = strcat(CURR_PHONE, (char)CURR_DIGIT);
-	  //Reset Pin/Interrupt
-	  P1IES |= ROTARY_END;
-	  P1IFG &= ~ROTARY_END;
-	}else{
-	  // Stop/Clear Timer
-	  TACTL &= MC_0 + TACLR;
-	  //Reset Pin/Interrupt
-	  P1IES ^= ROTARY_END;
-	  P1IFG &= ~ROTARY_END;
-	}
-      }
-    break;
-    default:
-      // Obviously there was a weird interrupt trigger....so we'll just clear it.
-      P1IFG=0;
-    break;
+  /* Debounce code goes here! */
+  
+	  switch(P1IFG){
+	    case HOOK:
+	      // Hook switch trigger
+	      if((P1IES & HOOK) != 0){
+					//Off Hook
+					OFFHOOK = 1;
+					P1IES |= HOOK; // Hi->Lo
+					P1IFG &= ~HOOK;
+	      }else{
+					//On Hook
+					char *cmd = "ATH;\r\0";
+					//Clear phone number
+					CURR_PHONE = '\0';
+					CURR_DIGIT = 0;
+					OFFHOOK = 0;
+					//Stop/Clear Timer
+					TACTL &= MC_0 + TACLR;
+					//Reset Pin/Interrupt
+					P1IES ^= HOOK; // Lo->Hi
+					P1IFG &= ~HOOK;
+	      }
+	    break;
+	    case CELL_UART_RXD:
+	      // Cell Serial Receive trigger
+	    break;
+	    case ROTARY:
+	      // Rotary counter trigger
+	      if(OFFHOOK == 1){
+					++CURR_DIGIT;
+					//Reset Interrupt
+					P1IFG &= ~ROTARY;
+	      }
+	    break;
+	    case ROTARY_END:
+	      // Rotary Dial End trigger
+	     if(OFFHOOK==1){
+					if((P1IFG & ROTARY_END) != 0){
+					  //Start/Clear Timer
+					  TACTL &= MC_1 + TACLR;
+					  //Append digit to phone number
+					  CURR_PHONE = strcat(CURR_PHONE, (char)CURR_DIGIT);
+					  //Reset Pin/Interrupt
+					  P1IES |= ROTARY_END;
+					  P1IFG &= ~ROTARY_END;
+					}else{
+					  // Stop/Clear Timer
+					  TACTL &= MC_0 + TACLR;
+					  //Reset Pin/Interrupt
+					  P1IES ^= ROTARY_END;
+					  P1IFG &= ~ROTARY_END;
+					}
+	      }
+	    break;
+	    default:
+	      // Obviously there was a weird interrupt trigger..
+				//..so we'll just clear it.
+	      P1IFG=0;
+	    break;
   }
   
 }
 #pragma vector = TIMERA0_VECTOR
 __interrupt void CCR0_ISR(void) {
-    // no flag clearing necessary; CCR0 has only one source, so it's automatic.
+    // No flag clearing necessary; CCR0 has only one source, so it's automatic.
+    // Create dial command
     char *cmd = strcat("ATD\0", strcat(CURR_PHONE, ";\r\0"));
+    /*
+    
+    Send dial command to the modem 
+    
+		*/
     //Reset timer
     TACTL &= MC_0 + TACLR;
 } // CCR0_ISR
 
 #pragma vector = TIMERB0_VECTOR
 __interrupt void CCR1_ISR(void){
-  //Timer B interrupt stuff goes here...still have to figure out what this will be.
-  
-  TBCTL &= MC_0 + TBCLR;
-}
+	  //Timer B interrupt stuff goes here..
+		/*
+		
+		This timer will be used for serial transmision to the cell modem
+		
+		*/
+	  
+	  //Reset Timer
+  	TBCTL &= MC_0 + TBCLR;
+} // CCR1_ISR

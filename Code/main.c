@@ -36,11 +36,11 @@
  */
 
 /* DEFINES */
-#define HOOK			0x01 // 1.0 Rotary Phone Hook switch
+#define HOOK							0x01 // 1.0 Rotary Phone Hook switch
 #define CELL_UART_TXD   	0x02 // 1.1->RX TXD to ADH8066 RX
-#define	CELL_UART_RXD	        0x04 // 1.2<-TX RXD from ADH8066 TX
-#define ROTARY			0x08 // 1.3 Rotary Phone Dial Increment Switch
-#define ROTARY_END		0x10 // 1.4 Rotary Dial Rest Position Switch
+#define	CELL_UART_RXD	    0x04 // 1.2<-TX RXD from ADH8066 TX
+#define ROTARY						0x08 // 1.3 Rotary Phone Dial Increment Switch
+#define ROTARY_END				0x10 // 1.4 Rotary Dial Rest Position Switch
 /*------------------------------------------------------------------------------
  * Conditions for 9600 Baud SW UART, SMCLK = 1MHz
  *------------------------------------------------------------------------------
@@ -112,10 +112,14 @@ void main(){
 		
 } // End Main
 
+/*
+ * Port_1 Interrupt Vector
+ * 
+ */
 #pragma vector = PORT1_VECTOR
 __interrupt void Port_1(void){
   
-  /* Debounce code goes here! */
+  /* Debounce code goes here...maybe! */
   
 	  switch(P1IFG){
 	    case HOOK:
@@ -178,6 +182,10 @@ __interrupt void Port_1(void){
   }
   
 }
+
+/*
+ * Timer A Interrupt
+ */
 #pragma vector = TIMERA0_VECTOR
 __interrupt void CCR0_ISR(void) {
     // No flag clearing necessary; CCR0 has only one source, so it's automatic.
@@ -192,6 +200,9 @@ __interrupt void CCR0_ISR(void) {
     TACTL &= MC_0 + TACLR;
 } // CCR0_ISR
 
+/*
+ * Timer B Interrupt
+ */
 #pragma vector = TIMERB0_VECTOR
 __interrupt void CCR1_ISR(void){
 	  //Timer B interrupt stuff goes here..

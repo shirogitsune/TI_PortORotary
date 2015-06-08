@@ -12,6 +12,7 @@
 #include <io.h>
 #include <stdbool.h>
 #include <string.h>
+#include <msp430x22x2.h>
 /*/Includes */
 
 /*
@@ -36,11 +37,11 @@
  */
 
 /* DEFINES */
-#define HOOK							0x01 // 1.0 Rotary Phone Hook switch
 #define CELL_UART_TXD   	0x02 // 1.1->RX TXD to ADH8066 RX
 #define	CELL_UART_RXD	    0x04 // 1.2<-TX RXD from ADH8066 TX
-#define ROTARY						0x08 // 1.3 Rotary Phone Dial Increment Switch
-#define ROTARY_END				0x10 // 1.4 Rotary Dial Rest Position Switch
+#define ROTARY				0x08 // 1.3 Rotary Phone Dial Increment Switch
+#define ROTARY_END			0x10 // 1.4 Rotary Dial Rest Position Switch
+#define HOOK				0x20 // 1.5 Rotary Phone Hook switch
 /*------------------------------------------------------------------------------
  * Conditions for 9600 Baud SW UART, SMCLK = 1MHz
  *------------------------------------------------------------------------------
@@ -55,6 +56,7 @@
 int CURR_DIGIT;
 char *CURR_PHONE;
 int OFFHOOK;
+int ONCALL;
 
 /* Function: main
  * Obviously the main function of the program. We're gonna use interrupts to save power
@@ -69,6 +71,7 @@ void main(){
 		DCOCTL = CALDCO_1MHZ;
 		
 		P1OUT = 0x00; // Initialize GPIO
+		ONCALL = 0;
 		P1SEL = CELL_UART_TXD + CELL_UART_RXD;  // Timer function for TXD/RXD pins
 	
 		/* Setup Timer A: We'll use this for finding if we need to start dialing */
@@ -119,8 +122,6 @@ void main(){
 #pragma vector = PORT1_VECTOR
 __interrupt void Port_1(void){
   
-  /* Debounce code goes here...maybe! */
-  
 	  switch(P1IFG){
 	    case HOOK:
 	      // Hook switch trigger
@@ -133,7 +134,7 @@ __interrupt void Port_1(void){
 					//On Hook
 					char *cmd = "ATH;\r\0";
 					//Clear phone number
-					CURR_PHONE = '\0';
+					CURR_PHONE = '';
 					CURR_DIGIT = 0;
 					OFFHOOK = 0;
 					//Stop/Clear Timer
@@ -208,7 +209,7 @@ __interrupt void CCR1_ISR(void){
 	  //Timer B interrupt stuff goes here..
 		/*
 		
-		This timer will be used for serial transmision to the cell modem
+		This timer will be used for serial transmission to the cell modem
 		
 		*/
 	  
